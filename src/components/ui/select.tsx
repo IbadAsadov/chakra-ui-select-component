@@ -1,7 +1,8 @@
 "use client";
 
 import type { CollectionItem } from "@chakra-ui/react";
-import { Box, Center, Select as ChakraSelect, createListCollection, Input, Portal, Tag } from "@chakra-ui/react";
+import { Box, Center, Select as ChakraSelect, createListCollection, Input, Portal, Tag, Text } from "@chakra-ui/react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import * as React from "react";
 import { CloseButton } from "./close-button";
 
@@ -95,9 +96,9 @@ const SelectValueText = function ({ ref, ...props }: SelectValueTextProps) {
                 </Tag.Root>
               ))}
               {selectedItems.length > 3 && (
-                <Tag.Root size="sm" variant="subtle" colorScheme="gray" mr={1}>
-                  <Tag.Label>{` + ${selectedItems.length - 3}`}</Tag.Label>
-                </Tag.Root>
+                <Text fontSize="sm" ml={1}>
+                  +{selectedItems.length - 3}
+                </Text>
               )}
             </Center>
           );
@@ -162,10 +163,16 @@ const getOptionValue = <T, V>(option: T, getValue: keyof T | ((option: T) => V))
   return option[getValue] as V;
 };
 
+const SELECT_ITEM_HEIGHT = {
+  sm: 28,
+  md: 32,
+  lg: 40,
+};
+
 export const Select = <T, V>({
-  multiple,
+  multiple = false,
   options,
-  size,
+  size = "md",
   name,
   getLabel = (option) => (option as unknown as { label: string })?.label,
   getValue = (option) => (option as unknown as { value: V })?.value,
@@ -179,8 +186,10 @@ export const Select = <T, V>({
   closeOnSelect = false,
   isSearchable = false,
   filter,
-}: SelectProps<T, V>) => {
+  enableVirtual = false,
+}: SelectProps<T, V> & { enableVirtual?: boolean }) => {
   const [searchTerm, setSearchTerm] = React.useState("");
+  const scrollContainerRef = React.useRef<HTMLDivElement>(null);
 
   const collection = React.useMemo(() => {
     const filtered = filter ? options.filter(filter) : options;
@@ -192,6 +201,23 @@ export const Select = <T, V>({
     });
   }, [getValue, getLabel, options, filter]);
 
+  const filteredItems = React.useMemo(() => {
+    return isSearchable && searchTerm
+      ? collection.items.filter((item) => item.label.toLowerCase().includes(searchTerm.toLowerCase()))
+      : collection.items;
+  }, [collection.items, isSearchable, searchTerm]);
+
+  const rowVirtualizer = useVirtualizer({
+    count: filteredItems.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => SELECT_ITEM_HEIGHT[size],
+    overscan: 5,
+    enabled: enableVirtual,
+  });
+
+  const itemsHeight = enableVirtual ? rowVirtualizer.getTotalSize() : filteredItems.length * SELECT_ITEM_HEIGHT[size];
+  const maxListHeight = 300;
+
   return (
     <SelectRoot
       size={size}
@@ -201,17 +227,13 @@ export const Select = <T, V>({
       value={value as string[]}
       onValueChange={({ value }) => onChange(value as V[])}
       closeOnSelect={closeOnSelect}
-      onInteractOutside={() => {
-        if (onBlur) {
-          onBlur();
-        }
-      }}
+      onInteractOutside={() => onBlur?.()}
       disabled={isDisabled}
     >
       <SelectTrigger disableClear={disableClear} hideArrow={hideArrow}>
         <SelectValueText placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent style={{ boxShadow: "0px 4px 30px 0px #23283B1A" }}>
+      <SelectContent boxShadow="0px 4px 30px 0px #23283B1A">
         {isSearchable && (
           <Box p={1}>
             <Input
@@ -224,21 +246,62 @@ export const Select = <T, V>({
             />
           </Box>
         )}
-        {collection.items.length ? (
-          collection.items
-            .filter((option) =>
-              isSearchable && searchTerm ? option.label.toLowerCase().includes(searchTerm.toLowerCase()) : true
+
+        <Box
+          ref={scrollContainerRef}
+          style={{
+            height: `${Math.min(itemsHeight, maxListHeight)}px`,
+            width: "100%",
+            overflow: "auto",
+            position: "relative",
+          }}
+        >
+          {filteredItems.length > 0 ? (
+            enableVirtual ? (
+              <Box
+                style={{
+                  height: `${itemsHeight}px`,
+                  width: "100%",
+                  position: "relative",
+                }}
+              >
+                {rowVirtualizer.getVirtualItems().map((virtualRow) => {
+                  const item = filteredItems[virtualRow.index];
+                  if (!item) return null;
+
+                  return (
+                    <SelectItem
+                      item={item}
+                      key={virtualRow.key}
+                      style={{
+                        position: "absolute",
+                        top: 0,
+                        left: 0,
+                        width: "100%",
+                        height: `${virtualRow.size}px`,
+                        transform: `translateY(${virtualRow.start}px)`,
+                      }}
+                    >
+                      {item.label}
+                    </SelectItem>
+                  );
+                })}
+              </Box>
+            ) : (
+              <Box>
+                {filteredItems.map((item) => (
+                  <SelectItem item={item} key={`${item.value}`}>
+                    {item.label}
+                  </SelectItem>
+                ))}
+              </Box>
             )
-            .map((item) => (
-              <SelectItem item={item.value} key={`${item.value}`}>
-                {item.label}
-              </SelectItem>
-            ))
-        ) : (
-          <Center p={2} fontSize={size}>
-            Seçim yoxdur
-          </Center>
-        )}
+          ) : (
+            <Center p={2} fontSize={size}>
+              Seçim yoxdur
+            </Center>
+          )}
+        </Box>
       </SelectContent>
     </SelectRoot>
   );

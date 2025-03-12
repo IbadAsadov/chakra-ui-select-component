@@ -1,57 +1,45 @@
-import { Center, VStack } from "@chakra-ui/react";
+import { Box } from "@chakra-ui/react";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Provider } from "./components/ui/provider";
 import { Select } from "./components/ui/select";
 
-const languages = [
-  { value: "JavaScript", label: "JavaScript" },
-  { value: "TypeScript", label: "TypeScript" },
-  { value: "Python", label: "Python" },
-  { value: "Java", label: "Java" },
-  { value: "C#", label: "C#" },
-  { value: "PHP", label: "PHP" },
-  { value: "Ruby", label: "Ruby" },
-  { value: "Go", label: "Go" },
-  { value: "Swift", label: "Swift" },
-  { value: "Kotlin", label: "Kotlin" },
-  { value: "Rust", label: "Rust" },
-  { value: "Scala", label: "Scala" },
-  { value: "Perl", label: "Perl" },
-  { value: "R", label: "R" },
-  { value: "Objective-C", label: "Objective-C" },
-  { value: "VBA", label: "VBA" },
-  { value: "Lua", label: "Lua" },
-  { value: "Dart", label: "Dart" },
-  { value: "Haskell", label: "Haskell" },
-  { value: "Shell", label: "Shell" },
-  { value: "PowerShell", label: "PowerShell" },
-  { value: "Assembly", label: "Assembly" },
-  { value: "C", label: "C" },
-  { value: "C++", label: "C++" },
-  { value: "HTML", label: "HTML" },
-  { value: "CSS", label: "CSS" },
-  { value: "SQL", label: "SQL" },
-];
+const fetchPhotos = async () => {
+  const response: Response = await fetch("https://jsonplaceholder.typicode.com/photos");
+  return response.json();
+};
+
+interface Photo {
+  albumId: number;
+  id: number;
+  title: string;
+  url: string;
+  thumbnailUrl: string;
+}
 
 function App() {
-  const [multipleValue, setMultipleValue] = useState<string[]>([]);
+  const { data } = useQuery<Photo[]>({
+    queryKey: ["photos"],
+    queryFn: fetchPhotos,
+  });
 
-  console.log({ multipleValue });
+  const [multipleValue, setMultipleValue] = useState<number[]>([]);
 
   return (
     <Provider>
-      <Center w="full" h="100vh">
-        <VStack w="500px" h="500px" gap={4}>
-          <Select
-            onChange={setMultipleValue}
-            options={languages}
-            value={multipleValue}
-            placeholder="Dil seçin"
-            isSearchable
-            multiple
-          />
-        </VStack>
-      </Center>
+      <Box p={4}>
+        <Select<Photo, number>
+          onChange={setMultipleValue}
+          options={data || []}
+          value={multipleValue}
+          placeholder="Dil seçin"
+          getLabel={(option) => `${option.id} - ${option.title}`}
+          getValue={(option) => option.id}
+          isSearchable
+          enableVirtual
+          multiple
+        />
+      </Box>
     </Provider>
   );
 }
